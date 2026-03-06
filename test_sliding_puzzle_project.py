@@ -86,3 +86,32 @@ def test_set_size_changes_board_dimensions(app):
     app.set_size(4)
     assert len(app.board) == 4
     assert len(app.board[0]) == 4
+
+def is_solvable(self, board):
+    flat = [num for row in board for num in row if num != 0]
+    inversions = 0
+
+    for i in range(len(flat)):
+        for j in range(i + 1, len(flat)):
+            if flat[i] > flat[j]:
+                inversions += 1
+
+    # For odd grid size (3x3)
+    if self.size % 2 == 1:
+        return inversions % 2 == 0
+
+    # For even grid size
+    blank_row = next(i for i, row in enumerate(board) if 0 in row)
+    blank_row_from_bottom = self.size - blank_row
+
+    if blank_row_from_bottom % 2 == 0:
+        return inversions % 2 == 1
+    else:
+        return inversions % 2 == 0
+    
+def test_shuffle_creates_solvable_board(app):
+    app.shuffle()
+    assert app.is_solvable(app.board) is True
+
+if __name__ == "__main__":
+    pytest.main()
