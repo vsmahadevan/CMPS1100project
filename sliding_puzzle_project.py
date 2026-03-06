@@ -1,196 +1,420 @@
 import tkinter as tk
 import random
+import time
 from PIL import Image, ImageTk
 
 EMPTY = 0
-IMAGE_PATH = "puppy.jpg"
+IMAGE_PATH = "puppy.jpg"   # Keep your image in the same folder
+
 
 class SlidingPuzzleApp:
-    def __init__(self, root, size=4, tile_px=90):
+    def __init__(self, root, size=3, tile_px=120):
         self.root = root
         self.size = size
         self.tile_px = tile_px
-        self.root.title(f"Sliding Puzzle ({self.size}x{self.size})")
+        self.board_px = self.size * self.tile_px
 
-        controls = tk.Frame(root)
-        controls.pack(pady=8)
+        self.root.title("Sliding Puzzle")
+        self.root.resizable(False, False)
+        self.root.configure(bg="#f7f4ef")
+
+        self.moves = 0
+        self.start_time = None
+        self.timer_running = False
+        self.game_over = False
+        self.confetti = []
+        self.tile_images = {}
+        self.goal_tiles = []
+        self.source_image = None
+
+        # Load original image once
+        self.original_image = Image.open(IMAGE_PATH)
+
+        # ---------- Title ----------
+        title = tk.Label(
+            root,
+            text="🧩 Sliding Puzzle Challenge 🧩",
+            font=("Helvetica", 26, "bold"),
+            fg="#2c3e50",
+            bg="#f7f4ef"
+        )
+        title.pack(pady=(12, 6))
+
+        # ---------- Controls ----------
+        controls = tk.Frame(root, bg="#f7f4ef")
+        controls.pack(pady=(0, 8))
 
         self.status = tk.Label(
-    controls,
-    text="Click a tile next to the empty space.",
-    width=40,        # fixed width prevents resizing
-    anchor="w"       # keeps text aligned left
-)
-        self.status.pack(side=tk.LEFT, padx=8)
+            controls,
+            text="Click tiles next to the empty space.",
+            font=("Helvetica", 12, "bold"),
+            fg="#34495e",
+            bg="#f7f4ef"
+        )
+        self.status.grid(row=0, column=0, columnspan=3, pady=(0, 8))
 
-        tk.Button(controls, text="Shuffle", command=self.shuffle).pack(side=tk.LEFT, padx=4)
-        tk.Button(controls, text="Reset", command=self.reset).pack(side=tk.LEFT, padx=4)
+        self.moves_label = tk.Label(
+            controls,
+            text="Moves: 0",
+            font=("Helvetica", 12, "bold"),
+            fg="#34495e",
+            bg="#f7f4ef"
+        )
+        self.moves_label.grid(row=1, column=0, padx=12)
 
-        tk.Button(controls, text="3x3", command=lambda: self.set_size(3)).pack(side=tk.LEFT, padx=4)
-        tk.Button(controls, text="4x4", command=lambda: self.set_size(4)).pack(side=tk.LEFT, padx=4)
-        tk.Button(controls, text="5x5", command=lambda: self.set_size(5)).pack(side=tk.LEFT, padx=4)
+        self.timer_label = tk.Label(
+            controls,
+            text="Time: 0s",
+            font=("Helvetica", 12, "bold"),
+            fg="#34495e",
+            bg="#f7f4ef"
+        )
+        self.timer_label.grid(row=1, column=1, padx=12)
 
-        self.board_frame = tk.Frame(root)
-        self.board_frame.pack(padx=10, pady=10)
+        play_again_btn = tk.Button(
+            controls,
+            text="🔄 Play Again",
+            font=("Helvetica", 11, "bold"),
+            bg="#3498db",
+            fg="white",
+            activebackground="#2980b9",
+            activeforeground="white",
+            relief="flat",
+            padx=10,
+            pady=5,
+            command=self.restart_game
+        )
+        play_again_btn.grid(row=1, column=2, padx=12)
 
-        self.board = []
-        self.buttons = []
-        self.empty_pos = (self.size - 1, self.size - 1)
+        # ---------- Size selector ----------
+        size_frame = tk.Frame(root, bg="#f7f4ef")
+        size_frame.pack(pady=(0, 10))
 
-        self.tile_photos = {}
-        self.blank_photo = None
+        tk.Label(
+            size_frame,
+            text="Puzzle Size:",
+            font=("Helvetica", 11, "bold"),
+            fg="#34495e",
+            bg="#f7f4ef"
+        ).pack(side="left", padx=5)
 
-        self.build_board_ui()
+        tk.Button(
+            size_frame,
+            text="3x3",
+            font=("Helvetica", 10, "bold"),
+            bg="#ecf0f1",
+            relief="flat",
+            padx=8,
+            pady=4,
+            command=lambda: self.change_size(3)
+        ).pack(side="left", padx=4)
+
+        tk.Button(
+            size_frame,
+            text="4x4",
+            font=("Helvetica", 10, "bold"),
+            bg="#ecf0f1",
+            relief="flat",
+            padx=8,
+            pady=4,
+            command=lambda: self.change_size(4)
+        ).pack(side="left", padx=4)
+
+        tk.Button(
+            size_frame,
+            text="5x5",
+            font=("Helvetica", 10, "bold"),
+            bg="#ecf0f1",
+            relief="flat",
+            padx=8,
+            pady=4,
+            command=lambda: self.change_size(5)
+        ).pack(side="left", padx=4)
+
+        # ---------- Main layout ----------
+        main_frame = tk.Frame(root, bg="#f7f4ef")
+        main_frame.pack(padx=12, pady=(0, 12))
+
+        self.canvas = tk.Canvas(
+            main_frame,
+            width=self.board_px,
+            height=self.board_px,
+            highlightthickness=0,
+            bd=0,
+            bg="white"
+        )
+        self.canvas.grid(row=0, column=0, padx=(0, 16))
+
+        preview_panel = tk.Frame(main_frame, bg="#f7f4ef")
+        preview_panel.grid(row=0, column=1, sticky="n")
+
+        preview_title = tk.Label(
+            preview_panel,
+            text="Goal Image",
+            font=("Helvetica", 13, "bold"),
+            fg="#2c3e50",
+            bg="#f7f4ef"
+        )
+        preview_title.pack(pady=(0, 8))
+
+        self.preview_display = tk.Label(
+            preview_panel,
+            bd=2,
+            relief="solid",
+            bg="white"
+        )
+        self.preview_display.pack()
+
+        preview_hint = tk.Label(
+            preview_panel,
+            text="Rebuild the image!",
+            font=("Helvetica", 10),
+            fg="#5d6d7e",
+            bg="#f7f4ef"
+        )
+        preview_hint.pack(pady=(8, 0))
+
+        self.canvas.bind("<Button-1>", self.on_click)
+
         self.load_and_slice_image()
-        self.reset()
-        self.shuffle()
+        self.restart_game()
 
-    def build_board_ui(self):
-        for widget in self.board_frame.winfo_children():
-            widget.destroy()
+    def get_square_cropped_image(self, img):
+        """Crop image to a square without stretching."""
+        width, height = img.size
+        side = min(width, height)
 
-        self.buttons = []
-        for r in range(self.size):
-            row_buttons = []
-            for c in range(self.size):
-                btn = tk.Button(
-                    self.board_frame,
-                    width=self.tile_px,
-                    height=self.tile_px,
-                    command=lambda rr=r, cc=c: self.on_click(rr, cc)
-                )
-                btn.grid(row=r, column=c, padx=3, pady=3)
-                row_buttons.append(btn)
-            self.buttons.append(row_buttons)
+        left = (width - side) // 2
+        top = (height - side) // 2
+        right = left + side
+        bottom = top + side
+
+        return img.crop((left, top, right, bottom))
 
     def load_and_slice_image(self):
-        img = Image.open(IMAGE_PATH).convert("RGB")
+        """Load image, crop to square, make preview, and slice into tiles."""
+        self.tile_images = {}
+        self.goal_tiles = []
 
-        w, h = img.size
-        side = min(w, h)
-        left = (w - side) // 2
-        top = (h - side) // 2
-        img = img.crop((left, top, left + side, top + side))
+        img = self.original_image.copy()
+        img = self.get_square_cropped_image(img)
+        img = img.resize((self.board_px, self.board_px), Image.Resampling.LANCZOS)
+        self.source_image = img
 
-        grid_px = self.size * self.tile_px
-        img = img.resize((grid_px, grid_px), Image.Resampling.LANCZOS)
+        # Preview image
+        preview_size = 140
+        preview = img.resize((preview_size, preview_size), Image.Resampling.LANCZOS)
+        self.preview_photo = ImageTk.PhotoImage(preview)
+        self.preview_display.config(image=self.preview_photo)
 
-        self.tile_photos = {}
-        tile_num = 1
-        for r in range(self.size):
-            for c in range(self.size):
-                if r == self.size - 1 and c == self.size - 1:
-                    break
+        tile_number = 1
 
-                x0 = c * self.tile_px
-                y0 = r * self.tile_px
-                tile_img = img.crop((x0, y0, x0 + self.tile_px, y0 + self.tile_px))
-                self.tile_photos[tile_num] = ImageTk.PhotoImage(tile_img)
-                tile_num += 1
+        for row in range(self.size):
+            for col in range(self.size):
+                if row == self.size - 1 and col == self.size - 1:
+                    self.goal_tiles.append(EMPTY)
+                    continue
 
-        blank = Image.new("RGB", (self.tile_px, self.tile_px), color=(230, 230, 230))
-        self.blank_photo = ImageTk.PhotoImage(blank)
+                left = col * self.tile_px
+                top = row * self.tile_px
+                right = left + self.tile_px
+                bottom = top + self.tile_px
 
-    def reset(self):
-        n = self.size * self.size
-        values = list(range(1, n)) + [EMPTY]
-        self.board = [values[i*self.size:(i+1)*self.size] for i in range(self.size)]
-        self.empty_pos = (self.size - 1, self.size - 1)
-        self.status.config(text="Reset to solved. Press Shuffle to play.")
-        self.render()
+                tile_img = img.crop((left, top, right, bottom))
+                photo = ImageTk.PhotoImage(tile_img)
 
-    def render(self):
-        for r in range(self.size):
-            for c in range(self.size):
-                val = self.board[r][c]
-                btn = self.buttons[r][c]
+                self.goal_tiles.append(tile_number)
+                self.tile_images[tile_number] = photo
+                tile_number += 1
 
-                if val == EMPTY:
-                    btn.config(image=self.blank_photo, state=tk.DISABLED)
-                else:
-                    btn.config(image=self.tile_photos[val], state=tk.NORMAL)
+    def restart_game(self):
+        """Reset counters and reshuffle the board."""
+        self.board = self.goal_tiles[:]
+        self.shuffle_board()
 
-    def on_click(self, r, c):
-        if self.is_adjacent((r, c), self.empty_pos):
-            self.swap((r, c), self.empty_pos)
-            self.empty_pos = (r, c)
-            self.render()
+        self.moves = 0
+        self.moves_label.config(text="Moves: 0")
 
-            if self.is_solved():
-                self.status.config(text="🎉 You win! Press Shuffle to play again.")
-            else:
-                self.status.config(text="Good move!")
-        else:
-            self.status.config(text="That tile can't move.")
+        self.start_time = time.time()
+        self.timer_running = True
+        self.game_over = False
+        self.confetti = []
 
-    def is_adjacent(self, pos1, pos2):
-        (r1, c1), (r2, c2) = pos1, pos2
-        return abs(r1 - r2) + abs(c1 - c2) == 1
+        self.status.config(text="Click tiles next to the empty space.")
+        self.draw_board()
+        self.update_timer()
 
-    def swap(self, pos1, pos2):
-        r1, c1 = pos1
-        r2, c2 = pos2
-        self.board[r1][c1], self.board[r2][c2] = self.board[r2][c2], self.board[r1][c1]
+    def change_size(self, new_size):
+        """Switch between 3x3, 4x4, and 5x5."""
+        self.size = new_size
+        self.board_px = self.size * self.tile_px
+        self.canvas.config(width=self.board_px, height=self.board_px)
 
-    def is_solved(self):
-        n = self.size * self.size
-        expected = list(range(1, n)) + [EMPTY]
-        flat = [self.board[r][c] for r in range(self.size) for c in range(self.size)]
-        return flat == expected
+        self.load_and_slice_image()
+        self.restart_game()
 
-    def is_solvable(self, board):
-        flat = [num for row in board for num in row if num != EMPTY]
+    def shuffle_board(self):
+        """
+        Make a solvable shuffled board for any size.
+        """
+        nums = self.goal_tiles[:]
+        while True:
+            random.shuffle(nums)
+            if nums != self.goal_tiles and self.is_solvable(nums):
+                self.board = nums
+                return
+
+    def count_inversions(self, board):
+        arr = [x for x in board if x != EMPTY]
         inversions = 0
 
-        for i in range(len(flat)):
-            for j in range(i + 1, len(flat)):
-                if flat[i] > flat[j]:
+        for i in range(len(arr)):
+            for j in range(i + 1, len(arr)):
+                if arr[i] > arr[j]:
                     inversions += 1
+
+        return inversions
+
+    def is_solvable(self, board):
+        """
+        Solvability rules:
+        - Odd grid width: inversions must be even
+        - Even grid width: depends on blank row counting from bottom
+        """
+        inversions = self.count_inversions(board)
 
         if self.size % 2 == 1:
             return inversions % 2 == 0
-
-        blank_row = next(i for i, row in enumerate(board) if EMPTY in row)
-        blank_row_from_bottom = self.size - blank_row
-
-        if blank_row_from_bottom % 2 == 0:
-            return inversions % 2 == 1
         else:
-            return inversions % 2 == 0
+            empty_index = board.index(EMPTY)
+            empty_row_from_top = empty_index // self.size
+            empty_row_from_bottom = self.size - empty_row_from_top
 
-    def shuffle(self):
-        moves = self.size * self.size * 50
-        for _ in range(moves):
-            r, c = self.empty_pos
-            neighbors = []
-            if r > 0: neighbors.append((r - 1, c))
-            if r < self.size - 1: neighbors.append((r + 1, c))
-            if c > 0: neighbors.append((r, c - 1))
-            if c < self.size - 1: neighbors.append((r, c + 1))
+            if empty_row_from_bottom % 2 == 0:
+                return inversions % 2 == 1
+            else:
+                return inversions % 2 == 0
 
-            chosen = random.choice(neighbors)
-            self.swap(chosen, self.empty_pos)
-            self.empty_pos = chosen
+    def draw_board(self):
+        self.canvas.delete("all")
 
-        if self.is_solved():
-            self.shuffle()
+        for index, value in enumerate(self.board):
+            row = index // self.size
+            col = index % self.size
+            x = col * self.tile_px
+            y = row * self.tile_px
+
+            if value == EMPTY:
+                self.canvas.create_rectangle(
+                    x, y, x + self.tile_px, y + self.tile_px,
+                    fill="white",
+                    outline="white"
+                )
+            else:
+                self.canvas.create_image(
+                    x, y,
+                    image=self.tile_images[value],
+                    anchor="nw"
+                )
+
+    def on_click(self, event):
+        if self.game_over:
             return
 
-        self.status.config(text="Shuffled! Click tiles to move.")
-        self.render()
+        col = event.x // self.tile_px
+        row = event.y // self.tile_px
 
-    def set_size(self, new_size):
-        self.size = new_size
-        self.root.title(f"Sliding Puzzle ({self.size}x{self.size})")
-        self.empty_pos = (self.size - 1, self.size - 1)
+        if not (0 <= row < self.size and 0 <= col < self.size):
+            return
 
-        self.build_board_ui()
-        self.load_and_slice_image()
-        self.reset()
-        self.shuffle()
+        clicked_index = row * self.size + col
+        empty_index = self.board.index(EMPTY)
+
+        if self.is_adjacent(clicked_index, empty_index):
+            self.board[empty_index], self.board[clicked_index] = (
+                self.board[clicked_index],
+                self.board[empty_index],
+            )
+
+            self.moves += 1
+            self.moves_label.config(text=f"Moves: {self.moves}")
+            self.draw_board()
+
+            if self.board == self.goal_tiles:
+                self.handle_win()
+
+    def is_adjacent(self, i, j):
+        row1, col1 = divmod(i, self.size)
+        row2, col2 = divmod(j, self.size)
+        return abs(row1 - row2) + abs(col1 - col2) == 1
+
+    def update_timer(self):
+        if self.timer_running and not self.game_over:
+            elapsed = int(time.time() - self.start_time)
+            self.timer_label.config(text=f"Time: {elapsed}s")
+            self.root.after(1000, self.update_timer)
+
+    def handle_win(self):
+        self.game_over = True
+        self.timer_running = False
+        elapsed = int(time.time() - self.start_time)
+
+        self.status.config(
+            text=f"🎉 YOU WIN!!! 🎉 Solved in {self.moves} moves and {elapsed} seconds!"
+        )
+        self.celebrate_win()
+
+    def celebrate_win(self):
+        colors = [
+            "red", "orange", "yellow", "green",
+            "blue", "purple", "pink", "cyan", "gold"
+        ]
+        self.confetti = []
+
+        for _ in range(160):
+            x = random.randint(0, self.board_px)
+            y = random.randint(-250, -10)
+            w = random.randint(4, 10)
+            h = random.randint(6, 12)
+
+            if random.choice([True, False]):
+                piece = self.canvas.create_rectangle(
+                    x, y, x + w, y + h,
+                    fill=random.choice(colors),
+                    outline=""
+                )
+            else:
+                piece = self.canvas.create_oval(
+                    x, y, x + w, y + h,
+                    fill=random.choice(colors),
+                    outline=""
+                )
+
+            dx = random.randint(-3, 3)
+            dy = random.randint(3, 8)
+            self.confetti.append((piece, dx, dy))
+
+        self.animate_confetti()
+
+    def animate_confetti(self):
+        still_falling = False
+        new_confetti = []
+
+        for piece, dx, dy in self.confetti:
+            self.canvas.move(piece, dx, dy)
+            coords = self.canvas.coords(piece)
+
+            if coords and coords[1] < self.board_px + 30:
+                still_falling = True
+                new_confetti.append((piece, dx, dy))
+
+        self.confetti = new_confetti
+
+        if still_falling:
+            self.root.after(30, self.animate_confetti)
 
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = SlidingPuzzleApp(root, size=4)
+    app = SlidingPuzzleApp(root, size=3, tile_px=120)
     root.mainloop()
