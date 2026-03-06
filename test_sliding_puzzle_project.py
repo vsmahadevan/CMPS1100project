@@ -1,40 +1,112 @@
 import pytest
 import tkinter as tk
-from unittest.mock import patch, MagicMock
 import sliding_puzzle_project
 
+EMPTY = 0
 
 # -------------------- Fixture --------------------
 @pytest.fixture
 def app():
     root = tk.Tk()
-    root.withdraw()  # hide the main window
+    root.withdraw()  # hide GUI
 
-    # Patch image loading and Tkinter PhotoImage to avoid GUI errors
-    with patch("sliding_puzzle_project.Image.open") as mock_open, \
-         patch("sliding_puzzle_project.ImageTk.PhotoImage") as mock_photo, \
-         patch.object(sliding_puzzle_project.SlidingPuzzleApp, "render"):
-
-        # Mock PIL image
-        mock_img = MagicMock()
-        mock_img.size = (500, 500)
-        mock_img.convert.return_value = mock_img
-        mock_img.crop.return_value = mock_img
-        mock_img.resize.return_value = mock_img
-        mock_open.return_value = mock_img
-
-        # Mock Tkinter PhotoImage
-        mock_photo.return_value = MagicMock()
-
-        # Create the app (render is mocked, so no GUI operations happen)
-        puzzle = sliding_puzzle_project.SlidingPuzzleApp(root, size=3)
+    puzzle = sliding_puzzle_project.SlidingPuzzleApp(root, size=3)
+    puzzle.game_over = False  # allow clicks during tests
 
     yield puzzle
     root.destroy()
 
 
+# -------------------- Helper --------------------
+def swap_last_two_tiles(board):
+    """Helper to swap last two tiles (used for move tests)."""
+    board[-1], board[-2] = board[-2], board[-1]
+
+
 # -------------------- Tests --------------------
-def test_reset_creates_solved_board(app):
+def test_reset_creates_solvable_board(app):
+    """Check that restarting game produces a solvable board with correct tiles."""
+    app.restart_game()
+    # Board should contain same tiles as goal_tiles
+    assert sorted(app.board) == sorted(app.goal_tiles)
+    # Board must be solvable
+    assert app.is_solvable(app.board) is True
+
+
+def test_is_adjacent_true(app):
+    size = app.size
+    assert app.is_adjacent(0, 1) is True
+    assert app.is_adjacent(0, size) is True
+
+
+def test_is_adjacent_false(app):
+    size = app.size
+    assert app.is_adjacent(0, size + 1) is False
+    assert app.is_adjacent(0, size * size - 1) is False
+
+
+def test_swap_logic(app):
+    board = app.goal_tiles[:]
+    swap_last_two_tiles(board)
+    assert board[-1] != app.goal_tiles[-1]
+    assert board[-2] != app.goal_tiles[-2]
+
+
+def test_is_solved_false_when_moved(app):
+    board = app.goal_tiles[:]
+    swap_last_two_tiles(board)
+    app.board = board
+    assert app.board != app.goal_tiles
+
+
+def test_on_click_valid_move(app):
+    board = app.goal_tiles[:]
+    swap_last_two_tiles(board)
+    app.board = board
+
+    class Event:
+        x = (app.size - 1) * app.tile_px
+        y = (app.size - 1) * app.tile_px
+
+    app.on_click(Event())
+    # After click, board should match goal_tiles
+    assert app.board == app.goal_tiles
+
+
+def test_on_click_invalid_move(app):
+    board = app.goal_tiles[:]
+    swap_last_two_tiles(board)
+    app.board = board
+
+    class Event:
+        x = 0
+        y = 0  # click far away, not adjacent
+
+    old_board = app.board[:]
+    app.on_click(Event())
+    assert app.board == old_board
+
+
+def test_shuffle_changes_board(app):
+    original = app.goal_tiles[:]
+    app.shuffle_board()
+    assert app.board != original
+
+
+def test_set_size_changes_board_dimensions(app):
+    app.change_size(4)
+    assert app.size == 4
+    assert app.board is not None
+    assert len(app.board) == 16
+
+
+def test_shuffle_creates_solvable_board(app):
+    app.shuffle_board()
+    assert app.is_solvable(app.board) is True
+
+
+if __name__ == "__main__":
+    pytest.main()def test_reset_creates_solved_board(app):
     app.reset()
     expected = [[1,2,3],[4,5,6],[7,8,0]]
     assert app.board == expected
