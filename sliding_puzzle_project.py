@@ -3,7 +3,7 @@ import random
 from PIL import Image, ImageTk
 
 EMPTY = 0
-IMAGE_PATH = "puppy.jpg"  # <-- your image
+IMAGE_PATH = "puppy.jpg"
 
 class SlidingPuzzleApp:
     def __init__(self, root, size=4, tile_px=90):
@@ -15,7 +15,12 @@ class SlidingPuzzleApp:
         controls = tk.Frame(root)
         controls.pack(pady=8)
 
-        self.status = tk.Label(controls, text="Click a tile next to the empty space.")
+        self.status = tk.Label(
+    controls,
+    text="Click a tile next to the empty space.",
+    width=40,        # fixed width prevents resizing
+    anchor="w"       # keeps text aligned left
+)
         self.status.pack(side=tk.LEFT, padx=8)
 
         tk.Button(controls, text="Shuffle", command=self.shuffle).pack(side=tk.LEFT, padx=4)
@@ -133,6 +138,26 @@ class SlidingPuzzleApp:
         flat = [self.board[r][c] for r in range(self.size) for c in range(self.size)]
         return flat == expected
 
+    def is_solvable(self, board):
+        flat = [num for row in board for num in row if num != EMPTY]
+        inversions = 0
+
+        for i in range(len(flat)):
+            for j in range(i + 1, len(flat)):
+                if flat[i] > flat[j]:
+                    inversions += 1
+
+        if self.size % 2 == 1:
+            return inversions % 2 == 0
+
+        blank_row = next(i for i, row in enumerate(board) if EMPTY in row)
+        blank_row_from_bottom = self.size - blank_row
+
+        if blank_row_from_bottom % 2 == 0:
+            return inversions % 2 == 1
+        else:
+            return inversions % 2 == 0
+
     def shuffle(self):
         moves = self.size * self.size * 50
         for _ in range(moves):
@@ -163,6 +188,7 @@ class SlidingPuzzleApp:
         self.load_and_slice_image()
         self.reset()
         self.shuffle()
+
 
 if __name__ == "__main__":
     root = tk.Tk()
