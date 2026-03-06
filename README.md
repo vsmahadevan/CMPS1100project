@@ -3,9 +3,9 @@
 ## Description
 
 This project implements a sliding puzzle game using Python and Tkinter.
-The puzzle displays an image that is divided into tiles arranged in a grid. One tile space is empty, allowing the player to slide neighboring tiles into the empty space. The goal of the game is to rearrange the tiles so the image returns to its original solved order.
+This project is a sliding puzzle game that utilizes Python as well as Tinter. It displays an image divided into tiles that is arranged on a grid. One of the tile spaces is empty so that players can slide these tiles into the empty space. The objective of the game is to rearrange these tiles to return the image back to the original order.
 
-The program also includes automated tests written with Pytest to verify that the puzzle logic works correctly.
+This repository also contains a test suite to ensure that the puzzle works as intended.
 
 ## Features
 
@@ -47,7 +47,7 @@ You can also run the test file directly with:
 
 python test_sliding_puzzle_project.py
 
-The tests check important puzzle behaviors including:
+The tests check:
 
 * Board reset
 * Valid and invalid tile moves
