@@ -21,8 +21,8 @@ This repository also contains a test suite to ensure that the puzzle works as in
 You must have the following installed:
 
 * Python 3
-* Tkinter (usually included with Python)
-* Pillow (for image handling)
+* Tkinter (usually included with Python) version 8.6
+* Pillow (for image handling) version 12.1.1
 * Pytest (for running tests)
 
 Install required packages with:
