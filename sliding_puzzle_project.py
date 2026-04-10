@@ -46,7 +46,7 @@ class SlidingPuzzleApp:
 
         self.status = tk.Label(
             controls,
-            text="Click tiles next to the empty space.",
+            text="Click tiles next to the empty space, including wrap-around edge moves.",
             font=("Helvetica", 12, "bold"),
             fg="#34495e",
             bg="#f7f4ef"
@@ -229,7 +229,6 @@ class SlidingPuzzleApp:
 
     def restart_game(self):
         """Reset counters and reshuffle the board."""
-        self.board = self.goal_tiles[:]
         self.shuffle_board()
 
         self.moves = 0
@@ -240,7 +239,9 @@ class SlidingPuzzleApp:
         self.game_over = False
         self.confetti = []
 
-        self.status.config(text="Click tiles next to the empty space.")
+        self.status.config(
+            text="Click tiles next to the empty space, including wrap-around edge moves."
+        )
         self.draw_board()
         self.update_timer()
 
@@ -253,16 +254,38 @@ class SlidingPuzzleApp:
         self.load_and_slice_image()
         self.restart_game()
 
-    def shuffle_board(self):
+    def shuffle_board(self, steps=300):
         """
-        Make a solvable shuffled board for any size.
+        Shuffle by making legal moves from the solved board.
+        This guarantees the board is reachable under wrap-around rules.
         """
-        nums = self.goal_tiles[:]
-        while True:
-            random.shuffle(nums)
-            if nums != self.goal_tiles and self.is_solvable(nums):
-                self.board = nums
-                return
+        self.board = self.goal_tiles[:]
+        empty_index = self.board.index(EMPTY)
+        last_move = None
+
+        for _ in range(steps):
+            possible_moves = []
+
+            for i in range(len(self.board)):
+                if i != empty_index and self.is_adjacent(i, empty_index):
+                    if i != last_move:
+                        possible_moves.append(i)
+
+            if not possible_moves:
+                for i in range(len(self.board)):
+                    if i != empty_index and self.is_adjacent(i, empty_index):
+                        possible_moves.append(i)
+
+            move_index = random.choice(possible_moves)
+            self.board[empty_index], self.board[move_index] = (
+                self.board[move_index],
+                self.board[empty_index],
+            )
+            last_move = empty_index
+            empty_index = move_index
+
+        if self.board == self.goal_tiles:
+            self.shuffle_board(steps)
 
     def count_inversions(self, board):
         arr = [x for x in board if x != EMPTY]
@@ -277,9 +300,8 @@ class SlidingPuzzleApp:
 
     def is_solvable(self, board):
         """
-        Solvability rules:
-        - Odd grid width: inversions must be even
-        - Even grid width: depends on blank row counting from bottom
+        Kept from original version, but no longer used for shuffling
+        now that wrap-around moves are allowed.
         """
         inversions = self.count_inversions(board)
 
@@ -344,9 +366,22 @@ class SlidingPuzzleApp:
                 self.handle_win()
 
     def is_adjacent(self, i, j):
-        row1, col1 = divmod(i, self.size)
-        row2, col2 = divmod(j, self.size)
-        return abs(row1 - row2) + abs(col1 - col2) == 1
+        row1, col1 = divmod(i, self.size)   # clicked tile
+        row2, col2 = divmod(j, self.size)   # empty tile
+
+        # Normal adjacent move
+        if abs(row1 - row2) + abs(col1 - col2) == 1:
+            return True
+
+        # Wrap-around move in same column: top <-> bottom
+        if col1 == col2 and abs(row1 - row2) == self.size - 1:
+            return True
+
+        # Wrap-around move in same row: left <-> right
+        if row1 == row2 and abs(col1 - col2) == self.size - 1:
+            return True
+
+        return False
 
     def update_timer(self):
         if self.timer_running and not self.game_over:
